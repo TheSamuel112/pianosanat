@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0d0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pianosanat</title>
+<style>
+  :root{
+    --bg:#0d0f14; --panel:#161a22; --line:#262c38; --text:#e9edf5; --dim:#7d8799;
+    --accent:#5ee0b0; --accent2:#ffcf5c; --danger:#ff6b6b;
+    --safe-t:env(safe-area-inset-top,0px); --safe-b:env(safe-area-inset-bottom,0px);
+    --safe-l:env(safe-area-inset-left,0px); --safe-r:env(safe-area-inset-right,0px);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  button{font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:10px 14px;cursor:pointer}
+  button:active{transform:scale(.97)}
+  button.primary{background:var(--accent);color:#06261b;border-color:transparent;font-weight:700}
+  button.ghost{background:transparent;border-color:transparent}
+  button.danger{color:var(--danger)}
+  input,textarea{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:12px;width:100%}
+  textarea{min-height:45vh;resize:vertical;line-height:1.5}
+  label{display:block;font-size:.85rem;color:var(--dim);margin:14px 0 6px}
+  [hidden]{display:none!important}
+  .view{min-height:100%;padding:calc(12px + var(--safe-t)) calc(14px + var(--safe-r)) calc(16px + var(--safe-b)) calc(14px + var(--safe-l))}
+
+  /* ---------- lista ---------- */
+  .head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .head h1{font-size:1.4rem;margin:0;flex:1}
+  .head h1 span{color:var(--accent)}
+  #songList{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+  .song{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:8px;cursor:pointer}
+  .song img{width:96px;height:54px;object-fit:cover;border-radius:8px;background:#000;flex:none}
+  .song .meta{flex:1;min-width:0}
+  .song .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .song .s{font-size:.8rem;color:var(--dim);margin-top:3px}
+  .song .s.ok{color:var(--accent)}
+  .empty{color:var(--dim);text-align:center;padding:40px 10px;line-height:1.6}
+  .foot{margin-top:24px;display:flex;gap:8px;justify-content:center}
+  .foot button{font-size:.85rem;color:var(--dim)}
+
+  /* ---------- muokkaus ---------- */
+  .row{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+  .row .grow{flex:1}
+  .hint{font-size:.8rem;color:var(--dim);margin-top:6px;line-height:1.4}
+
+  /* ---------- soitto ---------- */
+  #view-play{padding:0;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+  .bar{display:flex;align-items:center;gap:6px;padding:calc(6px + var(--safe-t)) calc(8px + var(--safe-r)) 6px calc(8px + var(--safe-l));
+    background:var(--bg);border-bottom:1px solid var(--line);flex:none}
+  .bar .title{flex:1;min-width:0;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .bar button{padding:7px 11px;border-radius:10px}
+  #stage{position:relative;flex:1;display:flex;flex-direction:column;min-height:0}
+  #videoWrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;flex:none}
+  #videoWrap iframe,#player{position:absolute;inset:0;width:100%;height:100%;border:0}
+  #lyrics{position:relative;flex:1;overflow-y:auto;padding:18px 16px 50vh;scroll-behavior:smooth;
+    -webkit-overflow-scrolling:touch}
+  .ln{font-size:1.15rem;line-height:1.35;padding:7px 10px;border-radius:10px;color:var(--dim);
+    transition:color .2s, font-size .2s, background .2s;cursor:pointer}
+  .ln.past{color:#4a5263}
+  .ln.on{color:var(--text);font-size:1.6rem;font-weight:700;background:rgba(94,224,176,.10)}
+  .ln.next{color:#b7c0d0}
+  .ln.notime{opacity:.75}
+  .ln.target{color:#1b1400;background:var(--accent2);font-weight:700;font-size:1.4rem}
+  .ln.timed-sync{color:#4a5263}
+  .banner{margin:0 0 10px;padding:10px 12px;border-radius:10px;background:rgba(255,207,92,.12);
+    color:var(--accent2);font-size:.9rem;line-height:1.4}
+  body.nolyrics #lyrics{display:none}
+  /* automaattinen vieritys: kaikki rivit samankokoisia, ettei teksti hypi */
+  body.auto #lyrics{scroll-behavior:auto}
+  body.auto .ln{font-size:1.35rem;color:#aeb7c7;transition:color .4s,background .4s}
+  body.auto .ln.on{font-size:1.35rem;font-weight:700;color:#fff;background:rgba(94,224,176,.10)}
+  body.auto .ln.past{color:#596173}
+
+  /* ajastuspalkki */
+  #syncBar{flex:none;display:flex;gap:8px;align-items:stretch;padding:10px calc(10px + var(--safe-r)) calc(10px + var(--safe-b)) calc(10px + var(--safe-l));
+    background:var(--panel);border-top:1px solid var(--line)}
+  #syncBar .side{display:flex;flex-direction:column;gap:6px}
+  #syncBar .side button{padding:8px 10px;font-size:.85rem}
+  #tapBtn{flex:1;background:var(--accent2);color:#1b1400;border:0;font-weight:800;font-size:1.25rem;
+    padding:14px 10px;border-radius:14px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:84px}
+  #tapBtn small{font-weight:600;font-size:.8rem;opacity:.75;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  /* asetusikkuna */
+  .sheetBg{position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center}
+  .sheet{background:var(--panel);border:1px solid var(--line);border-radius:18px 18px 0 0;width:100%;max-width:560px;
+    padding:16px 16px calc(18px + var(--safe-b));max-height:90dvh;overflow:auto}
+  .sheet h3{margin:2px 0 12px;font-size:1.05rem}
+  .sheet .item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+  .sheet .item:last-child{border-bottom:0}
+  .sheet .item .lbl{flex:1}
+  .sheet .item .lbl small{display:block;color:var(--dim);font-size:.78rem;margin-top:2px}
+  .sheet .full{width:100%;margin-top:8px}
+  .stepper{display:flex;align-items:center;gap:6px}
+  .stepper b{min-width:62px;text-align:center}
+  #backupText{min-height:30vh;font-family:ui-monospace,monospace;font-size:.75rem}
+
+  #toast{position:fixed;left:50%;bottom:calc(110px + var(--safe-b));transform:translateX(-50%);background:#000c;color:#fff;
+    padding:10px 16px;border-radius:12px;font-size:.9rem;z-index:99;max-width:90vw;text-align:center;pointer-events:none;
+    opacity:0;transition:opacity .25s}
+  #toast.show{opacity:1}
+
+  /* ---------- sanat videon päällä (overlay) ---------- */
+  body.overlay #lyrics{position:absolute;left:0;right:0;top:0;height:128px;max-height:62%;z-index:5;padding:4px 4% 0;
+    background:linear-gradient(rgba(0,0,0,.82) 0%,rgba(0,0,0,.70) 70%,rgba(0,0,0,0) 100%);
+    pointer-events:none;overflow:hidden;text-align:center;
+    mask-image:linear-gradient(#000 85%,transparent);-webkit-mask-image:linear-gradient(#000 85%,transparent)}
+  body.overlay #lyrics::after{content:"";display:block;height:300px}
+  body.overlay .ln{padding:1px 8px;font-size:1rem;text-shadow:0 1px 3px #000}
+  body.overlay .ln.on{font-size:1.2rem;background:transparent;color:#fff}
+  body.overlay .ln.target{font-size:1.05rem}
+  body.overlay .ln.past{opacity:0}
+  body.overlay.auto .ln{font-size:1rem;color:#d5dbe6}
+  body.overlay.auto .ln.on{font-size:1rem;background:transparent;color:#fff}
+  body.overlay.auto .ln.past{opacity:.35}
+  body.overlay .banner{display:none}
+  #turnHint{display:none}
+  body.overlay #turnHint{display:block;text-align:center;color:var(--dim);padding:28px 20px;line-height:1.5;font-size:.95rem}
+
+  /* ---------- vaakasuunta puhelimessa: video täyttää ruudun ---------- */
+  @media (orientation:landscape) and (max-height:560px){
+    .bar{padding-top:calc(3px + var(--safe-t));padding-bottom:3px}
+    .bar button{padding:4px 9px;font-size:.85rem}
+    .bar .title{font-size:.85rem}
+    #videoWrap{position:absolute;inset:0;aspect-ratio:auto;height:100%}
+    body.overlay #lyrics{padding:4px 18% 0;max-height:42%}
+    body.overlay.auto .ln, body.overlay.auto .ln.on{font-size:1.1rem}
+    body.overlay #turnHint{display:none}
+    #syncBar{position:absolute;left:0;right:0;bottom:0;z-index:6;background:rgba(22,26,34,.92);padding-top:6px;padding-bottom:calc(6px + var(--safe-b))}
+    #tapBtn{min-height:54px;font-size:1.05rem}
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== LISTA ===== -->
+<section id="view-list" class="view">
+  <div class="head">
+    <h1>🎹 Piano<span>sanat</span></h1>
+    <button class="primary" id="newBtn">+ Uusi</button>
+  </div>
+  <ul id="songList"></ul>
+  <div class="empty" id="emptyMsg" hidden>
+    Ei vielä biisejä.<br>Paina <b>+ Uusi</b>, liitä piano-videon YouTube-linkki ja sanat.
+  </div>
+  <div class="foot">
+    <button class="ghost" id="exportBtn">⬆ Vie varmuuskopio</button>
+    <button class="ghost" id="importBtn">⬇ Tuo</button>
+  </div>
+</section>
+
+<!-- ===== MUOKKAUS ===== -->
+<section id="view-edit" class="view" hidden>
+  <div class="head">
+    <button class="ghost" id="editBack">←</button>
+    <h1 id="editHeading">Uusi biisi</h1>
+  </div>
+  <label for="fTitle">Nimi</label>
+  <input id="fTitle" placeholder="esim. Kappaleen nimi – Artisti" autocomplete="off">
+  <label for="fUrl">YouTube-linkki (piano-video)</label>
+  <input id="fUrl" placeholder="https://youtu.be/..." inputmode="url" autocomplete="off">
+  <label for="fLyrics">Sanat – yksi rivi per laulettu rivi</label>
+  <textarea id="fLyrics" placeholder="Liitä sanat tähän. Tyhjät rivit ohitetaan."></textarea>
+  <div class="hint">Voit liittää sanat suoraan Geniuksesta – [Verse]-otsikot, linkit ja "You might also like" -jutut siivotaan pois automaattisesti.</div>
+  <div class="hint">Vinkki: jos muokkaat sanoja myöhemmin, ennallaan pysyvien rivien ajoitukset säilyy.</div>
+  <div class="row">
+    <button class="primary grow" id="saveBtn">Tallenna</button>
+    <button class="danger" id="deleteBtn" hidden>Poista</button>
+  </div>
+</section>
+
+<!-- ===== SOITTO ===== -->
+<section id="view-play" hidden>
+  <div class="bar">
+    <button class="ghost" id="playBack">←</button>
+    <div class="title" id="playTitle"></div>
+    <button id="rateBtn">1×</button>
+    <button id="menuBtn">⚙</button>
+  </div>
+  <div id="stage">
+    <div id="videoWrap"><div id="player"></div></div>
+    <div id="lyrics"></div>
+    <div id="turnHint">📱↻ Käännä puhelin vaakaan, niin video täyttää ruudun ja sanat näkyy sen päällä.<br><br>Älä käytä YouTuben omaa koko näyttö -nappia (sanat katoaa) – käytä ⚙ → Koko näyttö.</div>
+  </div>
+  <div id="syncBar" hidden>
+    <div class="side">
+      <button id="undoBtn">↶ Peru</button>
+      <button id="doneBtn">✓ Valmis</button>
+    </div>
+    <button id="tapBtn">RIVI ALKAA<small id="tapNext"></small></button>
+  </div>
+</section>
+
+<!-- ===== ASETUKSET ===== -->
+<div class="sheetBg" id="menuSheet" hidden>
+  <div class="sheet">
+    <h3>Asetukset</h3>
+    <div class="item">
+      <div class="lbl">Tarkka ajastus (valinnainen)<small>Ei pakollinen – sanat vierii muutenkin. Tällä voi ajastaa rivi riviltä.</small></div>
+      <button class="primary" id="syncStartBtn">Aloita</button>
+    </div>
+    <div class="item">
+      <div class="lbl">Sanat etuajassa<small>Kuinka paljon ennen riviä se korostuu.</small></div>
+      <div class="stepper"><button id="leadMinus">−</button><b id="leadVal">0.4 s</b><button id="leadPlus">+</button></div>
+    </div>
+    <div class="item">
+      <div class="lbl">Nollaa vierityksen korjaukset<small>Poistaa riviä napauttamalla tehdyt korjaukset.</small></div>
+      <button id="resetAnchorsBtn">Nollaa</button>
+    </div>
+    <div class="item">
+      <div class="lbl">Sanat pystytilassa<small>Videon päällä vai videon alla (vaakatilassa aina päällä).</small></div>
+      <button id="overlayBtn">Videon alle</button>
+    </div>
+    <div class="item">
+      <div class="lbl">Näytä sanat</div>
+      <button id="toggleLyricsBtn">Piilota</button>
+    </div>
+    <div class="item">
+      <div class="lbl">Koko näyttö<small>Kännykkä vaakaan → video koko ruudulle, sanat ylhäällä.</small></div>
+      <button id="fsBtn">Päälle</button>
+    </div>
+    <div class="item">
+      <div class="lbl">Muokkaa nimeä, linkkiä tai sanoja</div>
+      <button id="editFromPlay">Muokkaa</button>
+    </div>
+    <button class="full" id="menuClose">Sulje</button>
+  </div>
+</div>
+
+<!-- ===== VARMUUSKOPIO ===== -->
+<div class="sheetBg" id="backupSheet" hidden>
+  <div class="sheet">
+    <h3 id="backupHeading">Varmuuskopio</h3>
+    <div class="hint" id="backupHint"></div>
+    <textarea id="backupText" spellcheck="false"></textarea>
+    <div class="row">
+      <button class="primary grow" id="backupAction">Kopioi</button>
+      <button id="backupDl">Lataa tiedostona</button>
+      <button id="backupClose">Sulje</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(() => {
+  const LS = 'pianosanat.v1';
+  const RATES = [0.5, 0.75, 1];
+  const $ = id => document.getElementById(id);
+
+  let songs = load();
+  // Valmiiksi lisätty biisi (vain ensimmäisellä käynnistyksellä) – sanat liitetään itse
+  try {
+    if (!localStorage.getItem(LS + '.seeded')) {
+      if (!songs.some(s => s.videoId === 'GiwdZyuiqAk'))
+        songs.unshift({ id: 'eclipse', title: 'Total Eclipse of the Heart – Bonnie Tyler', videoId: 'GiwdZyuiqAk', lead: 0.4, lines: [] });
+      localStorage.setItem(LS + '.seeded', '1');
+      localStorage.setItem(LS, JSON.stringify(songs));
+    }
+  } catch (e) {}
+  let cur = null;            // avoinna oleva biisi
+  let editingId = null;      // muokattavan id (null = uusi)
+  let editReturnToPlay = false;
+  let player = null, playerReady = false, apiReady = false, pendingVid = null;
+  let syncing = false, syncIdx = 0;
+  let activeIdx = -2;
+  let rateIdx = 2;
+  let wakeLock = null;
+
+  // ---------- tallennus ----------
+  function load() {
+    try { return JSON.parse(localStorage.getItem(LS)) || []; } catch (e) { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(LS, JSON.stringify(songs)); }
+    catch (e) { toast('Tallennus epäonnistui – tee varmuuskopio!'); }
+  }
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+  // ---------- apurit ----------
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600);
+  }
+  function parseVideoId(s) {
+    s = (s || '').trim();
+    if (/^[\w-]{11}$/.test(s)) return s;
+    try {
+      const u = new URL(s);
+      if (u.hostname.includes('youtu.be')) return u.pathname.slice(1, 12) || null;
+      const v = u.searchParams.get('v'); if (v) return v.slice(0, 11);
+      const m = u.pathname.match(/\/(shorts|embed|live|v)\/([\w-]{11})/); if (m) return m[2];
+    } catch (e) {}
+    return null;
+  }
+  function show(view) {
+    for (const v of ['view-list', 'view-edit', 'view-play']) $(v).hidden = v !== view;
+    window.scrollTo(0, 0);
+  }
+  // Geniuksesta liitetyn tekstin siivous: linkit pois, [Verse]-otsikot pois,
+  // "You might also like" -suositukset pois.
+  function stripLinks(s) {
+    let prev;
+    do { prev = s; s = s.replace(/\[((?:[^\[\]]|\[[^\]]*\])*)\]\([^)]*\)/g, '$1'); } while (s !== prev);
+    return s;
+  }
+  function cleanLyrics(raw) {
+    const out = []; let skip = 0;
+    for (const line of raw.split(/\r?\n/)) {
+      const rawTrim = line.trim();
+      // suositeltu biisi linkkinä (…-lyrics)
+      if (/^\[[^\]]*\]\(https?:\/\/(www\.)?genius\.com\/[^)]*-lyrics\/?\)$/i.test(rawTrim)) continue;
+      let l = stripLinks(rawTrim);
+      const isHeader = /^\[[^\]]*\]$/.test(l);
+      if (skip > 0) {
+        if (!l || isHeader) skip = 0; else { skip--; continue; }
+      }
+      if (/you might also like/i.test(l)) {
+        const before = l.replace(/you might also like.*$/i, '').trim();
+        if (before) out.push(before);
+        skip = 9; continue;
+      }
+      if (isHeader) { out.push(''); continue; }
+      if (/^\d*\s*Embed$/i.test(l) || /^\d+\s+Contributors?\b/i.test(l) || /^Translations$/i.test(l)) continue;
+      out.push(l.replace(/\s+/g, ' '));
+    }
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  }
+  $('fLyrics').addEventListener('paste', () => setTimeout(() => {
+    const ta = $('fLyrics'), cleaned = cleanLyrics(ta.value);
+    if (cleaned !== ta.value) { ta.value = cleaned; toast('Sanat siivottu (linkit ja otsikot pois)'); }
+  }, 0));
+
+  const timedCount = s => s.lines.filter(l => typeof l.t === 'number').length;
+  const leadOf = s => (typeof s.lead === 'number' ? s.lead : 0.4);
+
+  // ---------- LISTA ----------
+  function renderList() {
+    const ul = $('songList'); ul.innerHTML = '';
+    $('emptyMsg').hidden = songs.length > 0;
+    songs.forEach(s => {
+      const li = document.createElement('li'); li.className = 'song';
+      const img = document.createElement('img');
+      img.src = `https://i.ytimg.com/vi/${s.videoId}/mqdefault.jpg`; img.alt = ''; img.loading = 'lazy';
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const t = document.createElement('div'); t.className = 't'; t.textContent = s.title || 'Nimetön';
+      const st = document.createElement('div');
+      const n = timedCount(s);
+      st.className = 's' + (n === s.lines.length && n > 0 ? ' ok' : '');
+      st.textContent = s.lines.length === 0 ? 'Liitä sanat ✎'
+        : n === 0 ? `${s.lines.length} riviä · ei ajastettu`
+        : n === s.lines.length ? `${n} riviä · ajastettu ✓` : `ajastettu ${n}/${s.lines.length}`;
+      meta.append(t, st);
+      const ed = document.createElement('button'); ed.className = 'ghost'; ed.textContent = '✎';
+      ed.onclick = e => { e.stopPropagation(); openEdit(s.id, false); };
+      li.append(img, meta, ed);
+      li.onclick = () => s.lines.length ? openPlay(s.id) : openEdit(s.id, false);
+      ul.append(li);
+    });
+  }
+
+  // ---------- MUOKKAUS ----------
+  function openEdit(id, fromPlay) {
+    editingId = id; editReturnToPlay = !!fromPlay;
+    const s = id ? songs.find(x => x.id === id) : null;
+    $('editHeading').textContent = !s ? 'Uusi biisi' : s.lines.length ? 'Muokkaa' : 'Liitä sanat';
+    $('fTitle').value = s ? s.title : '';
+    $('fUrl').value = s ? `https://youtu.be/${s.videoId}` : '';
+    $('fLyrics').value = s ? s.lines.map(l => l.text).join('\n') : '';
+    $('deleteBtn').hidden = !s;
+    if (player && playerReady) try { player.pauseVideo(); } catch (e) {}
+    show('view-edit');
+  }
+  $('newBtn').onclick = () => openEdit(null, false);
+  $('editBack').onclick = () => editReturnToPlay && cur ? openPlay(cur.id) : (renderList(), show('view-list'));
+  $('saveBtn').onclick = () => {
+    const vid = parseVideoId($('fUrl').value);
+    if (!vid) { toast('YouTube-linkki ei kelpaa'); return; }
+    const texts = cleanLyrics($('fLyrics').value).split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (!texts.length) { toast('Lisää sanat'); return; }
+    const title = $('fTitle').value.trim() || 'Nimetön';
+    let s = editingId ? songs.find(x => x.id === editingId) : null;
+    if (s) {
+      const old = s.lines, sameCount = old.length === texts.length;
+      s.lines = texts.map((text, i) => ({
+        text, t: old[i] && (sameCount || old[i].text === text) ? old[i].t : null
+      }));
+      if (s.videoId !== vid) s.lines.forEach(l => l.t = null); // eri video → ajoitukset nollataan
+      s.title = title; s.videoId = vid;
+    } else {
+      s = { id: uid(), title, videoId: vid, lead: 0.4, lines: texts.map(text => ({ text, t: null })) };
+      songs.unshift(s);
+    }
+    save();
+    openPlay(s.id);
+  };
+  $('deleteBtn').onclick = () => {
+    if (!editingId) return;
+    if (!confirm('Poistetaanko tämä biisi?')) return;
+    songs = songs.filter(x => x.id !== editingId); save();
+    cur = null; renderList(); show('view-list');
+  };
+
+  // ---------- SOITTO ----------
+  function openPlay(id) {
+    cur = songs.find(x => x.id === id); if (!cur) return;
+    $('playTitle').textContent = cur.title;
+    stopSync(false);
+    renderLyrics();
+    show('view-play');
+    loadVideo(cur.videoId);
+    keepAwake();
+  }
+  $('playBack').onclick = () => {
+    stopSync(true);
+    if (player && playerReady) try { player.pauseVideo(); } catch (e) {}
+    releaseWake(); renderList(); show('view-list');
+  };
+
+  function renderLyrics() {
+    const box = $('lyrics'); box.innerHTML = ''; activeIdx = -2;
+    W = [0]; cur.lines.forEach(l => W.push(W[W.length - 1] + l.text.length + 8));
+    document.body.classList.toggle('auto', !syncing && !isTimed());
+    smoothTop = null;
+    if (!syncing && !isTimed()) {
+      const b = document.createElement('div'); b.className = 'banner';
+      b.textContent = 'Sanat vierii videon tahdissa. Jos ne on edellä tai jäljessä, napauta riviä silloin kun se lauletaan.';
+      box.append(b);
+    }
+    cur.lines.forEach((l, i) => {
+      const d = document.createElement('div'); d.className = 'ln'; d.dataset.i = i;
+      d.textContent = l.text;
+      if (typeof l.t !== 'number') d.classList.add('notime');
+      d.onclick = () => onLineTap(i);
+      box.append(d);
+    });
+    updateHighlight(true);
+  }
+  const lineEls = () => $('lyrics').querySelectorAll('.ln');
+
+  function onLineTap(i) {
+    if (!player || !playerReady) return;
+    if (syncing) { syncGoto(i); return; }
+    if (!isTimed()) { addAnchor(i); return; }
+    const l = cur.lines[i];
+    if (typeof l.t === 'number') { player.seekTo(Math.max(0, l.t - 1.5), true); player.playVideo(); }
+  }
+
+  function setActive(i, force) {
+    if (i === activeIdx && !force) return;
+    activeIdx = i;
+    const els = lineEls();
+    els.forEach((el, k) => {
+      el.classList.toggle('on', !syncing && k === i);
+      el.classList.toggle('past', !syncing && i >= 0 && k < i);
+      el.classList.toggle('next', !syncing && k === i + 1);
+      el.classList.toggle('target', syncing && k === i);
+      el.classList.toggle('timed-sync', syncing && k < i);
+    });
+    const el = els[Math.max(0, i)];
+    if (el) {
+      const box = $('lyrics');
+      const ov = document.body.classList.contains('overlay');
+      const anchor = ov ? 0.02 : 0.3;
+      const top = el.offsetTop - box.clientHeight * anchor - (ov ? 0 : 10);
+      box.scrollTo({ top: Math.max(0, i < 0 ? 0 : top), behavior: force ? 'auto' : 'smooth' });
+    }
+  }
+
+  function currentIndex(t) {
+    const lead = leadOf(cur); let idx = -1;
+    cur.lines.forEach((l, i) => { if (typeof l.t === 'number' && l.t - lead <= t) idx = i; });
+    return idx;
+  }
+  function updateHighlight(force) {
+    if (!cur) return;
+    if (syncing) { setActive(syncIdx, force); return; }
+    let t = 0;
+    if (player && playerReady && player.getCurrentTime) t = player.getCurrentTime() || 0;
+    setActive(currentIndex(t), force);
+  }
+
+  // ---------- AUTOMAATTINEN VIERITYS (ei ajastusta) ----------
+  // Rivit jaetaan videon kestolle pituuden mukaan. Riviä napauttamalla lisätään
+  // "kohdistus" (tämä rivi alkaa nyt), ja väliin interpoloidaan.
+  let W = [0];                      // rivien kumulatiiviset painot
+  let smoothTop = null;
+  let clk = { raw: -1, base: 0, perf: 0 };
+  const isTimed = () => cur && cur.lines.length > 0 && timedCount(cur) === cur.lines.length;
+
+  function anchorList(dur) {
+    const T = W[W.length - 1];
+    const list = (cur.anchors || []).slice().sort((a, b) => a.t - b.t);
+    const s = { t: 0, w: 0 }, e = { t: Math.max(1, dur * 0.97), w: T };
+    if (!list.length || (s.t < list[0].t && s.w < list[0].w)) list.unshift(s);
+    const last = list[list.length - 1];
+    if (e.t > last.t && e.w > last.w) list.push(e);
+    return list;
+  }
+  function weightAt(t, dur) {
+    const A = anchorList(dur);
+    if (t <= A[0].t) return A[0].w;
+    for (let k = 0; k < A.length - 1; k++) {
+      if (t <= A[k + 1].t) { const a = A[k], b = A[k + 1]; return a.w + (b.w - a.w) * (t - a.t) / ((b.t - a.t) || 1); }
+    }
+    return A[A.length - 1].w;
+  }
+  function lineFloat(w) {
+    let i = 0; while (i < cur.lines.length - 1 && W[i + 1] <= w) i++;
+    return i + Math.min(1, Math.max(0, (w - W[i]) / ((W[i + 1] - W[i]) || 1)));
+  }
+  function addAnchor(i) {
+    const t = player.getCurrentTime() || 0, w = W[i];
+    cur.anchors = (cur.anchors || []).filter(a =>
+      Math.abs(a.t - t) > 1 && !(a.t < t && a.w >= w) && !(a.t > t && a.w <= w));
+    cur.anchors.push({ t: Math.round(t * 100) / 100, w });
+    save(); toast('Kohdistettu ✓');
+  }
+  // tasainen kello: YouTube päivittää ajan harvakseltaan, joten väliin arvioidaan
+  function smoothTime() {
+    const raw = player.getCurrentTime() || 0, now = performance.now();
+    const playing = player.getPlayerState && player.getPlayerState() === 1;
+    if (raw !== clk.raw) { clk = { raw, base: raw, perf: now }; }
+    if (!playing) return raw;
+    return Math.min(raw + 0.6, clk.base + (now - clk.perf) / 1000 * RATES[rateIdx]);
+  }
+  function autoScroll() {
+    if (!player || !playerReady || !player.getDuration) return;
+    const dur = player.getDuration() || 0; if (!dur || !cur.lines.length) return;
+    const lf = lineFloat(weightAt(smoothTime(), dur));
+    const i = Math.floor(lf), f = lf - i;
+    const els = lineEls(); const a = els[i], b = els[i + 1]; if (!a) return;
+    const box = $('lyrics');
+    const ov = document.body.classList.contains('overlay');
+    const pos = a.offsetTop + (b ? (b.offsetTop - a.offsetTop) * f : 0);
+    const lh = b ? b.offsetTop - a.offsetTop : a.offsetHeight;
+    const target = Math.max(0, pos - (ov ? lh * 0.9 : box.clientHeight * 0.3));
+    smoothTop = smoothTop === null || Math.abs(target - smoothTop) > 400 ? target : smoothTop + (target - smoothTop) * 0.2;
+    box.scrollTop = smoothTop;
+    if (i !== activeIdx) {
+      activeIdx = i;
+      els.forEach((el, k) => {
+        el.classList.toggle('on', k === i); el.classList.toggle('past', k < i);
+        el.classList.remove('next', 'target', 'timed-sync');
+      });
+    }
+  }
+  (function frame() {
+    requestAnimationFrame(frame);
+    if (!cur || $('view-play').hidden) return;
+    if (syncing || isTimed()) updateHighlight(false); else autoScroll();
+  })();
+
+  // ---------- sanat videon päällä ----------
+  const mqLand = matchMedia('(orientation:landscape) and (max-height:560px)');
+  let prefOverlay = true;
+  try { prefOverlay = localStorage.getItem(LS + '.overlay') !== '0'; } catch (e) {}
+  function applyOverlay() {
+    document.body.classList.toggle('overlay', prefOverlay || mqLand.matches);
+    smoothTop = null; activeIdx = -2;
+    $('overlayBtn').textContent = prefOverlay ? 'Videon alle' : 'Videon päälle';
+  }
+  mqLand.addEventListener ? mqLand.addEventListener('change', applyOverlay) : mqLand.addListener(applyOverlay);
+  $('overlayBtn').onclick = () => {
+    prefOverlay = !prefOverlay;
+    try { localStorage.setItem(LS + '.overlay', prefOverlay ? '1' : '0'); } catch (e) {}
+    applyOverlay();
+  };
+  $('resetAnchorsBtn').onclick = () => { if (cur) { cur.anchors = []; save(); toast('Korjaukset nollattu'); } };
+  applyOverlay();
+
+  // ---------- nopeus ----------
+  $('rateBtn').onclick = () => {
+    rateIdx = (rateIdx + RATES.length - 1) % RATES.length; // 1 → 0.75 → 0.5 → 1
+    const r = RATES[rateIdx];
+    $('rateBtn').textContent = r + '×';
+    if (player && playerReady) player.setPlaybackRate(r);
+  };
+
+  // ---------- AJASTUS ----------
+  function startSync() {
+    if (!player || !playerReady) { toast('Video latautuu vielä…'); return; }
+    syncing = true; $('syncBar').hidden = false;
+    renderLyrics();
+    syncGoto(0);
+    toast('Paina isoa nappia aina kun uusi rivi alkaa');
+  }
+  function syncGoto(i) {
+    syncIdx = Math.max(0, Math.min(i, cur.lines.length - 1));
+    // aloitetaan edellisen rivin kohdalta, jotta ehtii kuulla mistä tullaan
+    let from = 0;
+    for (let k = syncIdx - 1; k >= 0; k--) if (typeof cur.lines[k].t === 'number') { from = cur.lines[k].t; break; }
+    player.seekTo(Math.max(0, from), true); player.playVideo();
+    refreshSyncUi();
+  }
+  function refreshSyncUi() {
+    $('tapNext').textContent = `${syncIdx + 1}/${cur.lines.length}: ${cur.lines[syncIdx]?.text || ''}`;
+    setActive(syncIdx, false);
+  }
+  function syncTap() {
+    if (!syncing || !player || !playerReady) return;
+    const t = Math.round(player.getCurrentTime() * 100) / 100;
+    cur.lines[syncIdx].t = t;
+    const el = lineEls()[syncIdx]; if (el) el.classList.remove('notime');
+    save();
+    if (syncIdx >= cur.lines.length - 1) { stopSync(true); toast('Valmis! Sanat ajastettu 🎉'); return; }
+    syncIdx++; refreshSyncUi();
+  }
+  function stopSync(rerender) {
+    if (!syncing) { $('syncBar').hidden = true; return; }
+    syncing = false; $('syncBar').hidden = true; save();
+    if (rerender && cur) renderLyrics();
+  }
+  $('tapBtn').addEventListener('pointerdown', e => { e.preventDefault(); syncTap(); });
+  $('undoBtn').onclick = () => { if (syncIdx > 0) syncGoto(syncIdx - 1); else syncGoto(0); };
+  $('doneBtn').onclick = () => { stopSync(true); toast('Ajoitukset tallennettu'); };
+  document.addEventListener('keydown', e => {
+    if (syncing && (e.code === 'Space' || e.code === 'Enter') && !/INPUT|TEXTAREA/.test(e.target.tagName)) {
+      e.preventDefault(); syncTap();
+    }
+  });
+
+  // ---------- ASETUKSET ----------
+  function openMenu() {
+    $('leadVal').textContent = leadOf(cur).toFixed(1) + ' s';
+    $('toggleLyricsBtn').textContent = document.body.classList.contains('nolyrics') ? 'Näytä' : 'Piilota';
+    $('fsBtn').textContent = document.fullscreenElement ? 'Pois' : 'Päälle';
+    $('menuSheet').hidden = false;
+  }
+  const closeMenu = () => $('menuSheet').hidden = true;
+  $('menuBtn').onclick = openMenu;
+  $('menuClose').onclick = closeMenu;
+  $('menuSheet').onclick = e => { if (e.target === $('menuSheet')) closeMenu(); };
+  $('syncStartBtn').onclick = () => { closeMenu(); startSync(); };
+  function stepLead(d) {
+    cur.lead = Math.round(Math.min(3, Math.max(-2, leadOf(cur) + d)) * 10) / 10;
+    $('leadVal').textContent = cur.lead.toFixed(1) + ' s'; save(); updateHighlight(true);
+  }
+  $('leadMinus').onclick = () => stepLead(-0.1);
+  $('leadPlus').onclick = () => stepLead(0.1);
+  $('toggleLyricsBtn').onclick = () => {
+    document.body.classList.toggle('nolyrics');
+    $('toggleLyricsBtn').textContent = document.body.classList.contains('nolyrics') ? 'Näytä' : 'Piilota';
+  };
+  $('fsBtn').onclick = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else {
+        await document.documentElement.requestFullscreen();
+        try { await screen.orientation.lock('landscape'); } catch (e) {}
+      }
+      closeMenu();
+    } catch (e) { toast('Koko näyttö ei toimi tällä selaimella'); }
+  };
+  $('editFromPlay').onclick = () => { closeMenu(); stopSync(false); openEdit(cur.id, true); };
+
+  // ---------- näyttö päällä soittaessa ----------
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator && !wakeLock) { wakeLock = await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release', () => wakeLock = null); } } catch (e) {}
+  }
+  function releaseWake() { try { wakeLock && wakeLock.release(); } catch (e) {} wakeLock = null; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !$('view-play').hidden) keepAwake();
+  });
+
+  // ---------- YOUTUBE ----------
+  function loadVideo(vid) {
+    if (!apiReady) { pendingVid = vid; return; }
+    if (!player) {
+      playerReady = false;
+      player = new YT.Player('player', {
+        videoId: vid,
+        playerVars: { playsinline: 1, rel: 0, modestbranding: 1, fs: 0 }, // fs:0 → YouTuben oma koko näyttö (joka piilottaisi sanat) pois
+        events: {
+          onReady: () => { playerReady = true; player.setPlaybackRate(RATES[rateIdx]); },
+          onError: e => toast([101, 150].includes(e.data)
+            ? 'Videon tekijä on estänyt upotuksen – kokeile toista videota'
+            : 'Videota ei voi toistaa (virhe ' + e.data + ')')
+        }
+      });
+    } else if (playerReady) {
+      player.cueVideoById(vid);
+      setTimeout(() => { try { player.setPlaybackRate(RATES[rateIdx]); } catch (e) {} }, 300);
+    } else {
+      pendingVid = vid;
+    }
+  }
+  window.onYouTubeIframeAPIReady = () => {
+    apiReady = true;
+    if (pendingVid) { const v = pendingVid; pendingVid = null; loadVideo(v); }
+  };
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  tag.onerror = () => toast('YouTube ei latautunut – tarkista netti');
+  document.head.append(tag);
+
+  // ---------- VARMUUSKOPIO ----------
+  let backupMode = 'export';
+  $('exportBtn').onclick = () => {
+    backupMode = 'export';
+    $('backupHeading').textContent = 'Vie varmuuskopio';
+    $('backupHint').textContent = 'Biisit tallentuu vain tähän selaimeen. Kopioi tämä talteen (esim. muistiinpanoihin) tai lataa tiedostona.';
+    $('backupText').value = JSON.stringify(songs);
+    $('backupAction').textContent = 'Kopioi'; $('backupDl').hidden = false;
+    $('backupSheet').hidden = false;
+  };
+  $('importBtn').onclick = () => {
+    backupMode = 'import';
+    $('backupHeading').textContent = 'Tuo varmuuskopio';
+    $('backupHint').textContent = 'Liitä aiemmin viety teksti tähän. Samat biisit korvataan, uudet lisätään.';
+    $('backupText').value = '';
+    $('backupAction').textContent = 'Tuo'; $('backupDl').hidden = true;
+    $('backupSheet').hidden = false;
+  };
+  $('backupClose').onclick = () => $('backupSheet').hidden = true;
+  $('backupAction').onclick = async () => {
+    if (backupMode === 'export') {
+      try { await navigator.clipboard.writeText($('backupText').value); toast('Kopioitu!'); }
+      catch (e) { $('backupText').select(); toast('Valitse teksti ja kopioi käsin'); }
+      return;
+    }
+    try {
+      const data = JSON.parse($('backupText').value);
+      if (!Array.isArray(data)) throw 0;
+      let added = 0;
+      data.forEach(s => {
+        if (!s || !s.videoId || !Array.isArray(s.lines)) return;
+        s.id = s.id || uid();
+        const i = songs.findIndex(x => x.id === s.id);
+        if (i >= 0) songs[i] = s; else songs.push(s);
+        added++;
+      });
+      save(); renderList(); $('backupSheet').hidden = true; toast(`Tuotu ${added} biisiä`);
+    } catch (e) { toast('Teksti ei ole kelvollinen varmuuskopio'); }
+  };
+  $('backupDl').onclick = () => {
+    const blob = new Blob([$('backupText').value], { type: 'application/json' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'pianosanat-varmuuskopio.json'; document.body.append(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  };
+
+  // ---------- käynnistys ----------
+  renderList();
+  show('view-list');
+})();
+</script>
+</body>
+</html>
