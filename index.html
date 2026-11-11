@@ -124,6 +124,13 @@
   #turnHint{display:none}
   body.overlay #turnHint{display:block;text-align:center;color:var(--dim);padding:28px 20px;line-height:1.5;font-size:.95rem}
 
+  /* ---------- koko näyttö: palkki piiloon, pienet napit kulmaan ---------- */
+  body.fs .bar{display:none}
+  #fsCtl{display:none;position:fixed;top:calc(6px + var(--safe-t));right:calc(6px + var(--safe-r));z-index:20;gap:6px}
+  body.fs #fsCtl{display:flex}
+  #fsCtl button{background:rgba(0,0,0,.5);border-color:rgba(255,255,255,.15);padding:5px 10px;font-size:.85rem;opacity:.75}
+  body.fs #turnHint{padding-top:12px}
+
   /* ---------- vaakasuunta puhelimessa: video täyttää ruudun ---------- */
   @media (orientation:landscape) and (max-height:560px){
     .bar{padding-top:calc(3px + var(--safe-t));padding-bottom:3px}
@@ -182,12 +189,18 @@
     <button class="ghost" id="playBack">←</button>
     <div class="title" id="playTitle"></div>
     <button id="rateBtn">1×</button>
+    <button id="fsBarBtn" title="Koko näyttö">⛶</button>
     <button id="menuBtn">⚙</button>
+  </div>
+  <div id="fsCtl">
+    <button id="fsRate">1×</button>
+    <button id="fsMenu">⚙</button>
+    <button id="fsExit">✕</button>
   </div>
   <div id="stage">
     <div id="videoWrap"><div id="player"></div></div>
     <div id="lyrics"></div>
-    <div id="turnHint">📱↻ Käännä puhelin vaakaan, niin video täyttää ruudun ja sanat näkyy sen päällä.<br><br>Älä käytä YouTuben omaa koko näyttö -nappia (sanat katoaa) – käytä ⚙ → Koko näyttö.</div>
+    <div id="turnHint">📱↻ Käännä puhelin vaakaan, niin video täyttää ruudun ja sanat näkyy sen päällä.<br><br>Koko näyttöön pääset ylhäältä ⛶-napista.</div>
   </div>
   <div id="syncBar" hidden>
     <div class="side">
@@ -422,6 +435,7 @@
   $('playBack').onclick = () => {
     stopSync(true);
     if (player && playerReady) try { player.pauseVideo(); } catch (e) {}
+    if (document.body.classList.contains('fs')) exitFs();
     releaseWake(); renderList(); show('view-list');
   };
 
@@ -632,7 +646,7 @@
   function openMenu() {
     $('leadVal').textContent = leadOf(cur).toFixed(1) + ' s';
     $('toggleLyricsBtn').textContent = document.body.classList.contains('nolyrics') ? 'Näytä' : 'Piilota';
-    $('fsBtn').textContent = document.fullscreenElement ? 'Pois' : 'Päälle';
+    $('fsBtn').textContent = document.body.classList.contains('fs') ? 'Pois' : 'Päälle';
     $('menuSheet').hidden = false;
   }
   const closeMenu = () => $('menuSheet').hidden = true;
@@ -650,16 +664,37 @@
     document.body.classList.toggle('nolyrics');
     $('toggleLyricsBtn').textContent = document.body.classList.contains('nolyrics') ? 'Näytä' : 'Piilota';
   };
-  $('fsBtn').onclick = async () => {
+  // Koko näyttö: oikea fullscreen jos selain tukee (Android), muuten "näennäinen"
+  // (palkki piiloon) – esim. iPhonen Safari ei tue sivujen fullscreeniä.
+  const fsEl = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function setFs(on) { document.body.classList.toggle('fs', on); smoothTop = null; activeIdx = -2; }
+  async function enterFs() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    let real = false;
+    if (req) {
+      try { await req.call(el, { navigationUI: 'hide' }); real = true; } catch (e) {}
+      if (real) try { await screen.orientation.lock('landscape'); } catch (e) {}
+    }
+    setFs(true);
+    if (!real) toast('Käännä puhelin vaakaan 📱↻ (tämä selain ei tue täyttä koko näyttöä)');
+  }
+  async function exitFs() {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
-      else {
-        await document.documentElement.requestFullscreen();
-        try { await screen.orientation.lock('landscape'); } catch (e) {}
-      }
-      closeMenu();
-    } catch (e) { toast('Koko näyttö ei toimi tällä selaimella'); }
-  };
+      else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
+    } catch (e) {}
+    try { screen.orientation.unlock(); } catch (e) {}
+    setFs(false);
+  }
+  const onFsChange = () => { if (!fsEl() && document.body.classList.contains('fs')) setFs(false); };
+  document.addEventListener('fullscreenchange', onFsChange);
+  document.addEventListener('webkitfullscreenchange', onFsChange);
+  $('fsBtn').onclick = () => { closeMenu(); document.body.classList.contains('fs') ? exitFs() : enterFs(); };
+  $('fsBarBtn').onclick = enterFs;
+  $('fsExit').onclick = exitFs;
+  $('fsMenu').onclick = openMenu;
+  $('fsRate').onclick = () => { $('rateBtn').click(); $('fsRate').textContent = $('rateBtn').textContent; };
   $('editFromPlay').onclick = () => { closeMenu(); stopSync(false); openEdit(cur.id, true); };
 
   // ---------- näyttö päällä soittaessa ----------
